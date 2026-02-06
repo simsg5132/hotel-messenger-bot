@@ -9,7 +9,7 @@ app.use(bodyParser.json());
 // ===============================
 // TOKENS
 // ===============================
-const PAGE_ACCESS_TOKEN = 'YOUR_PAGE_ACCESS_TOKEN';
+const PAGE_ACCESS_TOKEN = 'EAAMqnZAIh9TwBQuZBIkjHb5Qs2R4FTeDXfe86Q3ubvp6iT86ra4S3dpbIDIJpBgGu3p0T5ndWYSExblDmbcgfI7q3ZC10Tx0jZAU4puGDNH2NXVY4Kj6WMuargrqdrIHTJWdcE9Bk3C2AWqJhKNpGIUmDz0qkCErM6U86yoH30nC0TJAVUAZCuD0Q8IPSoZCZA8qQm8saSJLwZDZD';
 const VERIFY_TOKEN = 'my_verify_token';
 
 // ===============================
