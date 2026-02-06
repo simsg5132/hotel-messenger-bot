@@ -9,7 +9,7 @@ app.use(bodyParser.json());
 // ===============================
 // TOKENS
 // ===============================
-const PAGE_ACCESS_TOKEN = 'EAAMqnZAIh9TwBQhOqG3iXNNmQk61xukV8flwMxKbUtaxhVps7YoVsArTxmLWVpZC1L69Dv8CTZCl8zIoKF2JDUQLAVcgZAfwAs8ZA8mzAUHTdM2nmqy5JMOAaUY4SKHUfMnWyFZCTFL5B8nlHZCdsmnS7cDRtpwI9kvdgorJlIVLYmsxz49nqcsSaCnWTZAsCRcrSDjhZBZBNbNwZDZD';
+const PAGE_ACCESS_TOKEN = 'EAAMqnZAIh9TwBQngO1dO7gqmveDbdZAO4zPZAMCjkaYYKBmPYfF0ZBXopH2cqker7dPFzVmPUoyEJZBBSMZAjKZCqM27ZCEWNMZCOfDglizfBbBbqiXh317Xj6pnAc4ZCSJwYHMdx2kkwvjFLOJCZCPJjK4HdXlcservyodsP8iThoMwc0XvvJIYZA5ZBqdfzS3xJ3crQvQggZA1k6ZAQZDZD';
 const VERIFY_TOKEN = 'my_verify_token';
 
 // ===============================
