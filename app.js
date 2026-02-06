@@ -9,11 +9,11 @@ app.use(bodyParser.json());
 // ===============================
 // TOKENS
 // ===============================
-const PAGE_ACCESS_TOKEN = 'EAAMqnZAIh9TwBQmNWzwjZBiZCMvitUeYcmIMUsUD6HWyMq6RO4TOz375XqptT1pUiMhjyMfOOWqKZAVBsIvPZBi3NtajqmErrCR1Li3Kp5vI9QHOjAZCIpINIhTz0YjfGBEnoegeClUnOSe8VOC6UgutDOZBHhBUkfoULTa3TgA4QrsGHKJZBSrQfJyDJOw0zA1NwZB9yjnZAp6gZDZD';
+const PAGE_ACCESS_TOKEN = 'EAAMqnZAIh9TwBQsrzmMw29geSupECQhibYREGdR2uSlFoiWZAHvMV0WDWJKIGVoQaDM6LhZARM3EJQMvhRimJv3hvfTmMuVkJ0fDIxV1pONPCihJF5ZB82IKE0u1ZBV1AgdRCDLm3vwW7NDpZAXNoHoZCmDyPxgERC3ZBOFxHEteJDIgZCCrZCP8UoZCLnaLHCQuuFwGZCSe9DunyQZDZD';
 const VERIFY_TOKEN = 'my_verify_token';
 
 // ===============================
-// SIMPLE USER MEMORY
+// USER MEMORY
 // ===============================
 const users = {};
 
@@ -40,7 +40,7 @@ const spaKeywords = [
 ];
 
 const thanksKeywords = [
-  "მადლობა", "გმადლობთ", "thanks", "thank you"
+  "მადლობა","გმადლობთ","thanks","thank you"
 ];
 
 // Georgian words typed in English letters (transliterations)
@@ -92,87 +92,25 @@ app.get('/webhook', (req, res) => {
 // HANDLE INCOMING EVENTS
 // ===============================
 app.post('/webhook', async (req, res) => {
-  const event = req.body.entry?.[0]?.messaging?.[0];
-  if (!event) return res.sendStatus(200);
+  try {
+    const event = req.body.entry?.[0]?.messaging?.[0];
+    if (!event) return res.sendStatus(200);
 
-  const senderId = event.sender.id;
+    const senderId = event.sender.id;
+    const text = event.message?.text || '';
 
-  // Initialize user
-  if (!users[senderId]) {
-    users[senderId] = {
-      lang: null,
-      finished: false,
-      greeted: false,
-      langLocked: false // NEW: language must be chosen first
-    };
-    await sendStartButtons(senderId); // Show start buttons immediately
-    return res.sendStatus(200);
-  }
-
-  const text = event.message?.text;
-
-  // ===============================
-  // HANDLE START BUTTON
-  // ===============================
-  if (event.message?.quick_reply) {
-    const payload = event.message.quick_reply.payload;
-
-    switch (payload) {
-      case 'START_EN':
-        users[senderId].lang = 'en';
-        users[senderId].langLocked = true;
-        users[senderId].greeted = true;
-        await sendText(senderId, 'Hello!');
-        await sendMainMenu(senderId, 'en');
-        return res.sendStatus(200);
-
-      case 'START_KA':
-        users[senderId].lang = 'ka';
-        users[senderId].langLocked = true;
-        users[senderId].greeted = true;
-        await sendText(senderId, 'მოგესალმებით!');
-        await sendMainMenu(senderId, 'ka');
-        return res.sendStatus(200);
-
-      case 'GO_BACK':
-        await sendMainMenu(senderId, users[senderId].lang);
-        return res.sendStatus(200);
-
-      case 'MORE_QUESTIONS':
-        await sendText(senderId, users[senderId].lang === 'ka'
-          ? 'რით შემიძლია დაგეხმაროთ?'
-          : 'How can I help you?'
-        );
-        await sendMainMenu(senderId, users[senderId].lang);
-        return res.sendStatus(200);
-
-      case 'START_AGAIN':
-        users[senderId].langLocked = false;
-        users[senderId].greeted = false;
-        await sendStartButtons(senderId);
-        return res.sendStatus(200);
-
-      // You can add more payload handling here
+    // Initialize user
+    if (!users[senderId]) {
+      users[senderId] = { lang: null, finished: false, greeted: false, started: false };
     }
-  }
 
-  // ===============================
-  // HANDLE TYPING BEFORE START
-  // ===============================
-  if (!users[senderId].langLocked) {
-    await sendText(senderId, 'Please select a language to start the chat.\nგთხოვთ აირჩიოთ ენა დაწყებისათვის.');
-    return res.sendStatus(200);
-  }
+    // ----- START BUTTON -----
+    if (!users[senderId].started) {
+      await sendStartButton(senderId);
+      return res.sendStatus(200);
+    }
 
-  // ===============================
-  // TEXT MESSAGE AFTER LANGUAGE IS LOCKED
-  // ===============================
-  if (text && users[senderId].langLocked) {
-
-    // Already finished conversation
-    if (users[senderId].finished) return res.sendStatus(200);
-
-    // THANK YOU MESSAGE
+    // ----- THANK YOU MESSAGE -----
     if (containsKeyword(text, thanksKeywords)) {
       await sendText(senderId, users[senderId].lang === 'ka'
         ? 'მადლობა დაკავშირებისთვის'
@@ -181,7 +119,7 @@ app.post('/webhook', async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // KEYWORD DETECTION
+    // ----- KEYWORD DETECTION -----
     if (containsKeyword(text, roomKeywords)) {
       await sendText(senderId, users[senderId].lang === 'ka'
         ? `მოგესალმებით, ოთახების ფასებთან და ჯავშნებთან დაკავშირებული ნებისმიერი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:
@@ -263,7 +201,7 @@ https://linktr.ee/paragraphfreedomsquaretbilisi`
       return res.sendStatus(200);
     }
 
-    // FALLBACK MESSAGE
+    // ----- FALLBACK MESSAGE -----
     await sendText(senderId, users[senderId].lang === 'ka'
       ? `დამატებითი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:
 +995 322 448 888
@@ -281,37 +219,41 @@ AYS.Luxury@paragraphhotels.com
 Or wait for an operator`
     );
 
-    return res.sendStatus(200);
-  }
+    res.sendStatus(200);
 
-  res.sendStatus(200);
+  } catch (err) {
+    console.error('Webhook error:', err);
+    res.sendStatus(200); // Always respond to stop typing
+  }
 });
 
 // ===============================
 // SEND TEXT
 // ===============================
 async function sendText(senderId, text) {
-  await axios.post(
-    `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
-    {
-      recipient: { id: senderId },
-      message: { text }
-    }
-  );
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+      { recipient: { id: senderId }, message: { text } }
+    );
+  } catch (err) {
+    console.error('Send message failed:', err.response?.data || err.message);
+  }
 }
 
 // ===============================
-// START BUTTONS (LANGUAGE SELECTION)
-async function sendStartButtons(senderId) {
+// START BUTTON
+// ===============================
+async function sendStartButton(senderId) {
   await axios.post(
     `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
     {
       recipient: { id: senderId },
       message: {
-        text: 'Please select a language / გთხოვთ აირჩიოთ ენა',
+        text: 'Select your language / აირჩიეთ ენა:',
         quick_replies: [
-          { content_type: 'text', title: 'Start Chat', payload: 'START_EN' },
-          { content_type: 'text', title: 'აიწყე ჩათი', payload: 'START_KA' }
+          { content_type: 'text', title: 'English', payload: 'LANG_EN' },
+          { content_type: 'text', title: 'ქართული', payload: 'LANG_KA' }
         ]
       }
     }
@@ -320,9 +262,10 @@ async function sendStartButtons(senderId) {
 
 // ===============================
 // MAIN MENU
+// ===============================
 async function sendMainMenu(senderId, lang) {
   await axios.post(
-    `https://graph.facebook.com/v18.0/me/messages?access_token=${EAAMqnZAIh9TwBQmNWzwjZBiZCMvitUeYcmIMUsUD6HWyMq6RO4TOz375XqptT1pUiMhjyMfOOWqKZAVBsIvPZBi3NtajqmErrCR1Li3Kp5vI9QHOjAZCIpINIhTz0YjfGBEnoegeClUnOSe8VOC6UgutDOZBHhBUkfoULTa3TgA4QrsGHKJZBSrQfJyDJOw0zA1NwZB9yjnZAp6gZDZD}`,
+    `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
     {
       recipient: { id: senderId },
       message: {
@@ -339,6 +282,7 @@ async function sendMainMenu(senderId, lang) {
 
 // ===============================
 // AFTER INFO BUTTONS
+// ===============================
 async function sendAfterInfoButtons(senderId, lang) {
   await axios.post(
     `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
@@ -357,9 +301,10 @@ async function sendAfterInfoButtons(senderId, lang) {
 
 // ===============================
 // RESTART BUTTON
+// ===============================
 async function sendRestartButton(senderId, lang) {
   await axios.post(
-    `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+    `https://graph.facebook.com/v18.0/me/messages?access_token=$'EAAMqnZAIh9TwBQsrzmMw29geSupECQhibYREGdR2uSlFoiWZAHvMV0WDWJKIGVoQaDM6LhZARM3EJQMvhRimJv3hvfTmMuVkJ0fDIxV1pONPCihJF5ZB82IKE0u1ZBV1AgdRCDLm3vwW7NDpZAXNoHoZCmDyPxgERC3ZBOFxHEteJDIgZCCrZCP8UoZCLnaLHCQuuFwGZCSe9DunyQZDZD`,
     {
       recipient: { id: senderId },
       message: {
