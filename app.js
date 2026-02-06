@@ -9,7 +9,7 @@ app.use(bodyParser.json());
 // ===============================
 // TOKENS
 // ===============================
-const PAGE_ACCESS_TOKEN = 'EAAMqnZAIh9TwBQhOqG3iXNNmQk61xukV8flwMxKbUtaxhVps7YoVsArTxmLWVpZC1L69Dv8CTZCl8zIoKF2JDUQLAVcgZAfwAs8ZA8mzAUHTdM2nmqy5JMOAaUY4SKHUfMnWyFZCTFL5B8nlHZCdsmnS7cDRtpwI9kvdgorJlIVLYmsxz49nqcsSaCnWTZAsCRcrSDjhZBZBNbNwZDZD';
+const PAGE_ACCESS_TOKEN = 'EAAMqnZAIh9TwBQmNWzwjZBiZCMvitUeYcmIMUsUD6HWyMq6RO4TOz375XqptT1pUiMhjyMfOOWqKZAVBsIvPZBi3NtajqmErrCR1Li3Kp5vI9QHOjAZCIpINIhTz0YjfGBEnoegeClUnOSe8VOC6UgutDOZBHhBUkfoULTa3TgA4QrsGHKJZBSrQfJyDJOw0zA1NwZB9yjnZAp6gZDZD';
 const VERIFY_TOKEN = 'my_verify_token';
 
 // ===============================
@@ -18,7 +18,7 @@ const VERIFY_TOKEN = 'my_verify_token';
 const users = {};
 
 // ===============================
-// KEYWORD GROUPS
+// KEYWORDS
 // ===============================
 const roomKeywords = [
   "room","rooms","night","nights","per night","number","booking",
@@ -102,32 +102,77 @@ app.post('/webhook', async (req, res) => {
     users[senderId] = {
       lang: null,
       finished: false,
-      greeted: false
+      greeted: false,
+      langLocked: false // NEW: language must be chosen first
     };
+    await sendStartButtons(senderId); // Show start buttons immediately
+    return res.sendStatus(200);
   }
 
   const text = event.message?.text;
 
   // ===============================
-  // TEXT MESSAGE (NO QUICK REPLY)
+  // HANDLE START BUTTON
   // ===============================
-  if (text && !event.message.quick_reply) {
+  if (event.message?.quick_reply) {
+    const payload = event.message.quick_reply.payload;
+
+    switch (payload) {
+      case 'START_EN':
+        users[senderId].lang = 'en';
+        users[senderId].langLocked = true;
+        users[senderId].greeted = true;
+        await sendText(senderId, 'Hello!');
+        await sendMainMenu(senderId, 'en');
+        return res.sendStatus(200);
+
+      case 'START_KA':
+        users[senderId].lang = 'ka';
+        users[senderId].langLocked = true;
+        users[senderId].greeted = true;
+        await sendText(senderId, 'მოგესალმებით!');
+        await sendMainMenu(senderId, 'ka');
+        return res.sendStatus(200);
+
+      case 'GO_BACK':
+        await sendMainMenu(senderId, users[senderId].lang);
+        return res.sendStatus(200);
+
+      case 'MORE_QUESTIONS':
+        await sendText(senderId, users[senderId].lang === 'ka'
+          ? 'რით შემიძლია დაგეხმაროთ?'
+          : 'How can I help you?'
+        );
+        await sendMainMenu(senderId, users[senderId].lang);
+        return res.sendStatus(200);
+
+      case 'START_AGAIN':
+        users[senderId].langLocked = false;
+        users[senderId].greeted = false;
+        await sendStartButtons(senderId);
+        return res.sendStatus(200);
+
+      // You can add more payload handling here
+    }
+  }
+
+  // ===============================
+  // HANDLE TYPING BEFORE START
+  // ===============================
+  if (!users[senderId].langLocked) {
+    await sendText(senderId, 'Please select a language to start the chat.\nგთხოვთ აირჩიოთ ენა დაწყებისათვის.');
+    return res.sendStatus(200);
+  }
+
+  // ===============================
+  // TEXT MESSAGE AFTER LANGUAGE IS LOCKED
+  // ===============================
+  if (text && users[senderId].langLocked) {
 
     // Already finished conversation
     if (users[senderId].finished) return res.sendStatus(200);
 
-    // ----- FIRST GREETING -----
-    if (!users[senderId].greeted) {
-      const lang = detectLanguage(text);
-      users[senderId].lang = lang;
-      users[senderId].greeted = true;
-
-      await sendText(senderId, lang === 'ka' ? 'მოგესალმებით!' : 'Hello!');
-      await sendMainMenu(senderId, lang);
-      return res.sendStatus(200);
-    }
-
-    // ----- THANK YOU MESSAGE -----
+    // THANK YOU MESSAGE
     if (containsKeyword(text, thanksKeywords)) {
       await sendText(senderId, users[senderId].lang === 'ka'
         ? 'მადლობა დაკავშირებისთვის'
@@ -136,7 +181,7 @@ app.post('/webhook', async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // ----- KEYWORD DETECTION -----
+    // KEYWORD DETECTION
     if (containsKeyword(text, roomKeywords)) {
       await sendText(senderId, users[senderId].lang === 'ka'
         ? `მოგესალმებით, ოთახების ფასებთან და ჯავშნებთან დაკავშირებული ნებისმიერი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:
@@ -173,7 +218,7 @@ https://linktr.ee/paragraphfreedomsquaretbilisi`
 
     if (containsKeyword(text, spaKeywords)) {
       await sendText(senderId, users[senderId].lang === 'ka'
-        ? `მოგესალმებით, სპას ერთდღიანი ვიზიტი:
+        ? `სპას ერთდღიანი ვიზიტი:
 კვირის დღეებში – 150 ₾
 უქმეებზე – 220 ₾
 
@@ -218,7 +263,7 @@ https://linktr.ee/paragraphfreedomsquaretbilisi`
       return res.sendStatus(200);
     }
 
-    // ----- FALLBACK MESSAGE -----
+    // FALLBACK MESSAGE
     await sendText(senderId, users[senderId].lang === 'ka'
       ? `დამატებითი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:
 +995 322 448 888
@@ -239,27 +284,6 @@ Or wait for an operator`
     return res.sendStatus(200);
   }
 
-  // ===============================
-  // QUICK REPLY HANDLING (unchanged)
-  // ===============================
-  if (event.message?.quick_reply) {
-    const payload = event.message.quick_reply.payload;
-    const lang = users[senderId].lang;
-
-    switch (payload) {
-      case 'ROOM_RESERVATION':
-      case 'SPA_RESERVATION':
-      case 'RESTAURANT_RESERVATION':
-      case 'LANG_KA':
-      case 'LANG_EN':
-      case 'MORE_QUESTIONS':
-      case 'GO_BACK':
-      case 'START_AGAIN':
-        // Keep your original switch case implementations here
-        break;
-    }
-  }
-
   res.sendStatus(200);
 });
 
@@ -277,11 +301,28 @@ async function sendText(senderId, text) {
 }
 
 // ===============================
-// MAIN MENU
-// ===============================
-async function sendMainMenu(senderId, lang) {
+// START BUTTONS (LANGUAGE SELECTION)
+async function sendStartButtons(senderId) {
   await axios.post(
     `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+    {
+      recipient: { id: senderId },
+      message: {
+        text: 'Please select a language / გთხოვთ აირჩიოთ ენა',
+        quick_replies: [
+          { content_type: 'text', title: 'Start Chat', payload: 'START_EN' },
+          { content_type: 'text', title: 'აიწყე ჩათი', payload: 'START_KA' }
+        ]
+      }
+    }
+  );
+}
+
+// ===============================
+// MAIN MENU
+async function sendMainMenu(senderId, lang) {
+  await axios.post(
+    `https://graph.facebook.com/v18.0/me/messages?access_token=${EAAMqnZAIh9TwBQmNWzwjZBiZCMvitUeYcmIMUsUD6HWyMq6RO4TOz375XqptT1pUiMhjyMfOOWqKZAVBsIvPZBi3NtajqmErrCR1Li3Kp5vI9QHOjAZCIpINIhTz0YjfGBEnoegeClUnOSe8VOC6UgutDOZBHhBUkfoULTa3TgA4QrsGHKJZBSrQfJyDJOw0zA1NwZB9yjnZAp6gZDZD}`,
     {
       recipient: { id: senderId },
       message: {
@@ -298,7 +339,6 @@ async function sendMainMenu(senderId, lang) {
 
 // ===============================
 // AFTER INFO BUTTONS
-// ===============================
 async function sendAfterInfoButtons(senderId, lang) {
   await axios.post(
     `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
@@ -317,7 +357,6 @@ async function sendAfterInfoButtons(senderId, lang) {
 
 // ===============================
 // RESTART BUTTON
-// ===============================
 async function sendRestartButton(senderId, lang) {
   await axios.post(
     `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
