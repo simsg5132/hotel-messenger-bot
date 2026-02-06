@@ -9,16 +9,16 @@ app.use(bodyParser.json());
 // ===============================
 // TOKENS
 // ===============================
-const PAGE_ACCESS_TOKEN = 'EAAMqnZAIh9TwBQsrzmMw29geSupECQhibYREGdR2uSlFoiWZAHvMV0WDWJKIGVoQaDM6LhZARM3EJQMvhRimJv3hvfTmMuVkJ0fDIxV1pONPCihJF5ZB82IKE0u1ZBV1AgdRCDLm3vwW7NDpZAXNoHoZCmDyPxgERC3ZBOFxHEteJDIgZCCrZCP8UoZCLnaLHCQuuFwGZCSe9DunyQZDZD';
+const PAGE_ACCESS_TOKEN = 'EAAMqnZAIh9TwBQhOqG3iXNNmQk61xukV8flwMxKbUtaxhVps7YoVsArTxmLWVpZC1L69Dv8CTZCl8zIoKF2JDUQLAVcgZAfwAs8ZA8mzAUHTdM2nmqy5JMOAaUY4SKHUfMnWyFZCTFL5B8nlHZCdsmnS7cDRtpwI9kvdgorJlIVLYmsxz49nqcsSaCnWTZAsCRcrSDjhZBZBNbNwZDZD';
 const VERIFY_TOKEN = 'my_verify_token';
 
 // ===============================
-// USER MEMORY
+// SIMPLE USER MEMORY
 // ===============================
 const users = {};
 
 // ===============================
-// KEYWORDS
+// KEYWORD GROUPS
 // ===============================
 const roomKeywords = [
   "room","rooms","night","nights","per night","number","booking",
@@ -40,7 +40,7 @@ const spaKeywords = [
 ];
 
 const thanksKeywords = [
-  "მადლობა","გმადლობთ","thanks","thank you"
+  "მადლობა", "გმადლობთ", "thanks", "thank you"
 ];
 
 // Georgian words typed in English letters (transliterations)
@@ -61,19 +61,6 @@ function containsKeyword(message, keywords) {
   });
 }
 
-function isGeorgian(text) {
-  return /[ა-ჰ]/.test(text);
-}
-
-function isGeorgianLikeEnglish(text) {
-  text = text.toLowerCase();
-  return geokeysTranslit.some(k => text.includes(k));
-}
-
-function detectLanguage(text) {
-  return isGeorgian(text) || isGeorgianLikeEnglish(text) ? 'ka' : 'en';
-}
-
 // ===============================
 // WEBHOOK VERIFICATION
 // ===============================
@@ -92,37 +79,55 @@ app.get('/webhook', (req, res) => {
 // HANDLE INCOMING EVENTS
 // ===============================
 app.post('/webhook', async (req, res) => {
-  try {
-    const event = req.body.entry?.[0]?.messaging?.[0];
-    if (!event) return res.sendStatus(200);
+  const event = req.body.entry?.[0]?.messaging?.[0];
+  if (!event) return res.sendStatus(200);
 
-    const senderId = event.sender.id;
-    const text = event.message?.text || '';
+  const senderId = event.sender.id;
 
-    // Initialize user
-    if (!users[senderId]) {
-      users[senderId] = { lang: null, finished: false, greeted: false, started: false };
-    }
+  // Initialize user
+  if (!users[senderId]) {
+    users[senderId] = {
+      lang: null,
+      finished: false,
+      greeted: false,
+      started: false
+    };
+  }
 
-    // ----- START BUTTON -----
-    if (!users[senderId].started) {
-      await sendStartButton(senderId);
-      return res.sendStatus(200);
-    }
+  const text = event.message?.text;
 
-    // ----- THANK YOU MESSAGE -----
-    if (containsKeyword(text, thanksKeywords)) {
-      await sendText(senderId, users[senderId].lang === 'ka'
-        ? 'მადლობა დაკავშირებისთვის'
-        : 'Thank you for contacting us'
-      );
-      return res.sendStatus(200);
-    }
+  // ===============================
+  // FIRST MESSAGE - ASK LANGUAGE
+  // ===============================
+  if (!users[senderId].started) {
+    users[senderId].started = true;
+    await sendTextWithButtons(senderId, 'Hello Please choose a language\nგამარჯობა გთხოვთ აირჩიოთ ენა', [
+      { title: 'English', payload: 'LANG_EN' },
+      { title: 'ქართული', payload: 'LANG_KA' }
+    ]);
+    return res.sendStatus(200);
+  }
 
-    // ----- KEYWORD DETECTION -----
-    if (containsKeyword(text, roomKeywords)) {
-      await sendText(senderId, users[senderId].lang === 'ka'
-        ? `მოგესალმებით, ოთახების ფასებთან და ჯავშნებთან დაკავშირებული ნებისმიერი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:
+  // ===============================
+  // HANDLE QUICK REPLIES
+  // ===============================
+  if (event.message?.quick_reply) {
+    const payload = event.message.quick_reply.payload;
+
+    switch (payload) {
+      case 'LANG_EN':
+        users[senderId].lang = 'en';
+        await sendMainMenu(senderId, 'en');
+        break;
+
+      case 'LANG_KA':
+        users[senderId].lang = 'ka';
+        await sendMainMenu(senderId, 'ka');
+        break;
+
+      case 'ROOM_RESERVATION':
+        await sendText(senderId, users[senderId].lang === 'ka'
+          ? `მოგესალმებით, ოთახების ფასებთან და ჯავშნებთან დაკავშირებული ნებისმიერი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:
 +995 322 448 888
 
 ან მოგვწერეთ:
@@ -130,7 +135,7 @@ AYS.Luxury@paragraphhotels.com
 
 დამატებითი ინფორმაციის მისაღებად, ეწვიეთ ჩვენს ვებგვერდს:
 https://www.marriott.com/en-us/hotels/tbslc-paragraph-freedom-square-a-luxury-collection-hotel-tbilisi/overview/`
-        : `For room rates and reservations, please contact us at:
+          : `For room rates and reservations, please contact us at:
 +995 322 448 888
 
 Or email us:
@@ -138,25 +143,23 @@ AYS.Luxury@paragraphhotels.com
 
 For more information, visit our website:
 https://www.marriott.com/en-us/hotels/tbslc-paragraph-freedom-square-a-luxury-collection-hotel-tbilisi/`
-      );
-      await sendAfterInfoButtons(senderId, users[senderId].lang);
-      return res.sendStatus(200);
-    }
+        );
+        await sendAfterInfoButtons(senderId, users[senderId].lang);
+        break;
 
-    if (containsKeyword(text, restaurantKeywords)) {
-      await sendText(senderId, users[senderId].lang === 'ka'
-        ? `მოგესალმებით, ჩვენი მენიუ შეგიძლიათ იხილოთ შემდეგ ბმულზე:
+      case 'RESTAURANT_RESERVATION':
+        await sendText(senderId, users[senderId].lang === 'ka'
+          ? `მოგესალმებით, ჩვენი მენიუ შეგიძლიათ იხილოთ შემდეგ ბმულზე:
 https://linktr.ee/paragraphfreedomsquaretbilisi`
-        : `You can view our menu at the following link:
+          : `You can view our menu at the following link:
 https://linktr.ee/paragraphfreedomsquaretbilisi`
-      );
-      await sendAfterInfoButtons(senderId, users[senderId].lang);
-      return res.sendStatus(200);
-    }
+        );
+        await sendAfterInfoButtons(senderId, users[senderId].lang);
+        break;
 
-    if (containsKeyword(text, spaKeywords)) {
-      await sendText(senderId, users[senderId].lang === 'ka'
-        ? `სპას ერთდღიანი ვიზიტი:
+      case 'SPA_RESERVATION':
+        await sendText(senderId, users[senderId].lang === 'ka'
+          ? `სპას ერთდღიანი ვიზიტი:
 კვირის დღეებში – 150 ₾
 უქმეებზე – 220 ₾
 
@@ -176,7 +179,7 @@ https://linktr.ee/paragraphfreedomsquaretbilisi`
 
 სპა პროცედურების ჩამონათვალი:
 https://linktr.ee/paragraphfreedomsquaretbilisi`
-        : `One-day spa access:
+          : `One-day spa access:
 Weekdays – 150 GEL
 Weekends – 220 GEL
 
@@ -196,13 +199,58 @@ Membership includes:
 
 Spa treatment list:
 https://linktr.ee/paragraphfreedomsquaretbilisi`
+        );
+        await sendAfterInfoButtons(senderId, users[senderId].lang);
+        break;
+
+      case 'GO_BACK':
+        await sendMainMenu(senderId, users[senderId].lang);
+        break;
+
+      case 'MORE_QUESTIONS':
+        await sendText(senderId, users[senderId].lang === 'ka'
+          ? `დამატებითი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:
++995 322 448 888
+
+ან მოგვწერეთ:
+AYS.Luxury@paragraphhotels.com
+
+ან დაელოდეთ ოპერატორს`
+          : `For additional information please contact us at:
++995 322 448 888
+
+Or email us:
+AYS.Luxury@paragraphhotels.com
+
+Or wait for an operator`
+        );
+        break;
+
+      case 'START_AGAIN':
+        users[senderId].started = false;
+        await sendText(senderId, 'Chat restarted.');
+        break;
+    }
+
+    return res.sendStatus(200);
+  }
+
+  // ===============================
+  // HANDLE TEXT MESSAGES AFTER LANGUAGE SELECTED
+  // ===============================
+  if (text) {
+    const lang = users[senderId].lang;
+    // THANK YOU MESSAGE
+    if (containsKeyword(text, thanksKeywords)) {
+      await sendText(senderId, lang === 'ka'
+        ? 'მადლობა დაკავშირებისთვის'
+        : 'Thank you for contacting us'
       );
-      await sendAfterInfoButtons(senderId, users[senderId].lang);
       return res.sendStatus(200);
     }
 
-    // ----- FALLBACK MESSAGE -----
-    await sendText(senderId, users[senderId].lang === 'ka'
+    // FALLBACK IF UNRECOGNIZED
+    await sendText(senderId, lang === 'ka'
       ? `დამატებითი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:
 +995 322 448 888
 
@@ -218,43 +266,35 @@ AYS.Luxury@paragraphhotels.com
 
 Or wait for an operator`
     );
-
-    res.sendStatus(200);
-
-  } catch (err) {
-    console.error('Webhook error:', err);
-    res.sendStatus(200); // Always respond to stop typing
   }
+
+  res.sendStatus(200);
 });
 
 // ===============================
 // SEND TEXT
 // ===============================
 async function sendText(senderId, text) {
-  try {
-    await axios.post(
-      `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
-      { recipient: { id: senderId }, message: { text } }
-    );
-  } catch (err) {
-    console.error('Send message failed:', err.response?.data || err.message);
-  }
+  await axios.post(
+    `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+    {
+      recipient: { id: senderId },
+      message: { text }
+    }
+  );
 }
 
 // ===============================
-// START BUTTON
+// SEND TEXT WITH BUTTONS
 // ===============================
-async function sendStartButton(senderId) {
+async function sendTextWithButtons(senderId, text, buttons) {
   await axios.post(
     `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
     {
       recipient: { id: senderId },
       message: {
-        text: 'Select your language / აირჩიეთ ენა:',
-        quick_replies: [
-          { content_type: 'text', title: 'English', payload: 'LANG_EN' },
-          { content_type: 'text', title: 'ქართული', payload: 'LANG_KA' }
-        ]
+        text,
+        quick_replies: buttons.map(btn => ({ content_type: 'text', title: btn.title, payload: btn.payload }))
       }
     }
   );
@@ -264,19 +304,13 @@ async function sendStartButton(senderId) {
 // MAIN MENU
 // ===============================
 async function sendMainMenu(senderId, lang) {
-  await axios.post(
-    `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
-    {
-      recipient: { id: senderId },
-      message: {
-        text: lang === 'ka' ? 'რით შემიძლია დაგეხმაროთ?' : 'How can I help you?',
-        quick_replies: [
-          { content_type: 'text', title: lang === 'ka' ? 'ოთახის რეზერვაცია' : 'Room reservation', payload: 'ROOM_RESERVATION' },
-          { content_type: 'text', title: lang === 'ka' ? 'სპას რეზერვაცია' : 'Spa reservation', payload: 'SPA_RESERVATION' },
-          { content_type: 'text', title: lang === 'ka' ? 'რესტორნის რეზერვაცია' : 'Restaurant reservation', payload: 'RESTAURANT_RESERVATION' }
-        ]
-      }
-    }
+  await sendTextWithButtons(senderId,
+    lang === 'ka' ? 'რით შემიძლია დაგეხმაროთ?' : 'How can I help you?',
+    [
+      { title: lang === 'ka' ? 'ოთახის რეზერვაცია' : 'Room', payload: 'ROOM_RESERVATION' },
+      { title: lang === 'ka' ? 'რესტორნის რეზერვაცია' : 'Restaurant', payload: 'RESTAURANT_RESERVATION' },
+      { title: lang === 'ka' ? 'სპას რეზერვაცია' : 'Spa', payload: 'SPA_RESERVATION' }
+    ]
   );
 }
 
@@ -284,36 +318,12 @@ async function sendMainMenu(senderId, lang) {
 // AFTER INFO BUTTONS
 // ===============================
 async function sendAfterInfoButtons(senderId, lang) {
-  await axios.post(
-    `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
-    {
-      recipient: { id: senderId },
-      message: {
-        text: lang === 'ka' ? 'გსურთ კიდევ რამე?' : 'Would you like anything else?',
-        quick_replies: [
-          { content_type: 'text', title: lang === 'ka' ? 'უკან' : 'Go back', payload: 'GO_BACK' },
-          { content_type: 'text', title: lang === 'ka' ? 'კიდევ მაქვს კითხვა' : 'I have another question', payload: 'MORE_QUESTIONS' }
-        ]
-      }
-    }
-  );
-}
-
-// ===============================
-// RESTART BUTTON
-// ===============================
-async function sendRestartButton(senderId, lang) {
-  await axios.post(
-    `https://graph.facebook.com/v18.0/me/messages?access_token=$'EAAMqnZAIh9TwBQsrzmMw29geSupECQhibYREGdR2uSlFoiWZAHvMV0WDWJKIGVoQaDM6LhZARM3EJQMvhRimJv3hvfTmMuVkJ0fDIxV1pONPCihJF5ZB82IKE0u1ZBV1AgdRCDLm3vwW7NDpZAXNoHoZCmDyPxgERC3ZBOFxHEteJDIgZCCrZCP8UoZCLnaLHCQuuFwGZCSe9DunyQZDZD`,
-    {
-      recipient: { id: senderId },
-      message: {
-        text: lang === 'ka' ? 'გსურთ საუბრის თავიდან დაწყება?' : 'Would you like to start again?',
-        quick_replies: [
-          { content_type: 'text', title: lang === 'ka' ? 'თავიდან დაწყება' : 'Start again', payload: 'START_AGAIN' }
-        ]
-      }
-    }
+  await sendTextWithButtons(senderId,
+    lang === 'ka' ? 'გსურთ კიდევ რამე?' : 'Would you like anything else?',
+    [
+      { title: lang === 'ka' ? 'უკან' : 'Go Back', payload: 'GO_BACK' },
+      { title: lang === 'ka' ? 'კიდევ მაქვს კითხვა' : 'I have more questions', payload: 'MORE_QUESTIONS' }
+    ]
   );
 }
 
