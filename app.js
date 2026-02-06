@@ -9,7 +9,7 @@ app.use(bodyParser.json());
 // ===============================
 // TOKENS
 // ===============================
-const PAGE_ACCESS_TOKEN = 'EAAMqnZAIh9TwBQhOXR938VEWpo1L16fSLjEKZCPqaLHKvG9qIFZCTvr5s5xJpkq5bCOdlJS6ZA1gQMXdx85jgUH4Jhb357iU7VFFiVCgz0J1ZCiZAqadjYzQKelz2medn3jp33iByqu3vu71p26SOFH09hgjrTzPVo1sNhOuNZAdaj7HFFpUQzelOxgy0VWoXYUPZCRHo6ZC9YAZDZD';
+const PAGE_ACCESS_TOKEN = 'EAAMqnZAIh9TwBQhOqG3iXNNmQk61xukV8flwMxKbUtaxhVps7YoVsArTxmLWVpZC1L69Dv8CTZCl8zIoKF2JDUQLAVcgZAfwAs8ZA8mzAUHTdM2nmqy5JMOAaUY4SKHUfMnWyFZCTFL5B8nlHZCdsmnS7cDRtpwI9kvdgorJlIVLYmsxz49nqcsSaCnWTZAsCRcrSDjhZBZBNbNwZDZD';
 const VERIFY_TOKEN = 'my_verify_token';
 
 // ===============================
@@ -20,29 +20,25 @@ const users = {};
 // ===============================
 // KEYWORD GROUPS
 // ===============================
-const roomKeywords = [
-  "room","rooms","night","nights","per night","number","booking",
+const roomKeywords = ["room","rooms","night","nights","per night","number","booking",
   "ოთახი","ოთახის","ღამე","ნომერი","ნომრის","ადამიანზე","ოთახზე",
   "otaxis","otaxi","gamis","ghamis","ghame","nomeri","nomris","otaxze","adamianze gamis"
 ];
 
-const restaurantKeywords = [
-  "restaurant","table","reservation","menu","food","drink",
+const restaurantKeywords = ["restaurant","table","reservation","menu","food","drink",
   "კაცზე","მაგიდის","მაგიდაზე","ადამიანზე","ჯავშანი",
   "მენიუ","სასმელი","საჭმელი",
   "kacze","magidis","magida","sasmeli","sasmelis","adamianze magidis"
 ];
 
-const spaKeywords = [
-  "spa","sauna","pool","swimming","membership",
+const spaKeywords = ["spa","sauna","pool","swimming","membership",
   "აბონიმენტი","საუნა","საუნის","საუნის ფასი","სპა","აუზი","სპის","აუზის","აუზის ფასი",
   "abonimenti","sauna","saunis","saunis pasi","spa","spis","auzi","auzis","auzis pasi"
 ];
 
-const thanksKeywords = [
-  "მადლობა", "გმადლობთ", "thanks", "thank you"
-];
+const thanksKeywords = ["მადლობა", "გმადლობთ", "thanks", "thank you"];
 
+// Georgian words typed in English letters (transliterations)
 const geokeysTranslit = [
   "otaxi","otaxis","gamis","ghamis","ghame","nomeri","nomris","otaxze","adamianze gamis",
   "kacze","magidis","magida","sasmeli","sasmelis","adamianze magidis",
@@ -69,6 +65,23 @@ function isGeorgianLikeEnglish(text) {
   return geokeysTranslit.some(k => text.includes(k));
 }
 
+function detectLanguage(text) {
+  return isGeorgian(text) || isGeorgianLikeEnglish(text) ? 'ka' : 'en';
+}
+
+// Fetch user first name from Messenger
+async function getUserName(senderId) {
+  try {
+    const response = await axios.get(
+      `https://graph.facebook.com/${senderId}?fields=first_name&access_token=${PAGE_ACCESS_TOKEN}`
+    );
+    return response.data.first_name || '';
+  } catch (err) {
+    console.error('Error fetching user name:', err.message);
+    return '';
+  }
+}
+
 // ===============================
 // WEBHOOK VERIFICATION
 // ===============================
@@ -92,134 +105,270 @@ app.post('/webhook', async (req, res) => {
 
   const senderId = event.sender.id;
 
+  // Initialize user memory
   if (!users[senderId]) {
     users[senderId] = {
       lang: null,
-      greeted: false
+      finished: false,
+      greeted: false,
+      lastResponse: null, // prevent repeated messages
     };
   }
 
   const text = event.message?.text;
 
-  // -------------------------------
-  // START BUTTON / LANGUAGE SELECTION
-  // -------------------------------
-  if (!users[senderId].greeted) {
-    await sendText(senderId, "Hello! Please choose a language\nგამარჯობა, გთხოვთ აირჩიოთ ენა");
-    await sendLanguageButtons(senderId);
-    return res.sendStatus(200);
-  }
-
-  // -------------------------------
-  // HANDLE QUICK REPLIES
-  // -------------------------------
+  // ===============================
+  // QUICK REPLY HANDLING
+  // ===============================
   if (event.message?.quick_reply) {
     const payload = event.message.quick_reply.payload;
+    const lang = users[senderId].lang;
 
     switch (payload) {
       case 'LANG_EN':
         users[senderId].lang = 'en';
-        users[senderId].greeted = true;
+        await sendText(senderId, 'How can I help you?');
         await sendMainMenu(senderId, 'en');
         break;
-
       case 'LANG_KA':
         users[senderId].lang = 'ka';
-        users[senderId].greeted = true;
+        await sendText(senderId, 'რით შემიძლია დაგეხმაროთ?');
         await sendMainMenu(senderId, 'ka');
         break;
-
       case 'ROOM_RESERVATION':
         await sendText(senderId, users[senderId].lang === 'ka'
-          ? `მოგესალმებით, ოთახების ფასებთან და ჯავშნებთან დაკავშირებული ნებისმიერი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:\n+995 322 448 888\n\nან მოგვწერეთ:\nAYS.Luxury@paragraphhotels.com\n\nდამატებითი ინფორმაციის მისაღებად, ეწვიეთ ჩვენს ვებგვერდს:\nhttps://www.marriott.com/en-us/hotels/tbslc-paragraph-freedom-square-a-luxury-collection-hotel-tbilisi/overview/`
-          : `For room rates and reservations, please contact us at:\n+995 322 448 888\n\nOr email us:\nAYS.Luxury@paragraphhotels.com\n\nFor more information, visit our website:\nhttps://www.marriott.com/en-us/hotels/tbslc-paragraph-freedom-square-a-luxury-collection-hotel-tbilisi/`
+          ? `მოგესალმებით, ოთახების ფასებთან და ჯავშნებთან დაკავშირებული ნებისმიერი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:
++995 322 448 888
+
+ან მოგვწერეთ:
+AYS.Luxury@paragraphhotels.com
+
+დამატებითი ინფორმაციის მისაღებად, ეწვიეთ ჩვენს ვებგვერდს:
+https://www.marriott.com/en-us/hotels/tbslc-paragraph-freedom-square-a-luxury-collection-hotel-tbilisi/overview/`
+          : `For room rates and reservations, please contact us at:
++995 322 448 888
+
+Or email us:
+AYS.Luxury@paragraphhotels.com
+
+For more information, visit our website:
+https://www.marriott.com/en-us/hotels/tbslc-paragraph-freedom-square-a-luxury-collection-hotel-tbilisi/`
         );
         await sendAfterInfoButtons(senderId, users[senderId].lang);
         break;
-
       case 'RESTAURANT_RESERVATION':
         await sendText(senderId, users[senderId].lang === 'ka'
-          ? `მოგესალმებით, ჩვენი მენიუ შეგიძლიათ იხილოთ შემდეგ ბმულზე:\nhttps://linktr.ee/paragraphfreedomsquaretbilisi`
-          : `You can view our menu at the following link:\nhttps://linktr.ee/paragraphfreedomsquaretbilisi`
+          ? `მოგესალმებით, ჩვენი მენიუ შეგიძლიათ იხილოთ შემდეგ ბმულზე:
+https://linktr.ee/paragraphfreedomsquaretbilisi`
+          : `You can view our menu at the following link:
+https://linktr.ee/paragraphfreedomsquaretbilisi`
         );
         await sendAfterInfoButtons(senderId, users[senderId].lang);
         break;
-
       case 'SPA_RESERVATION':
         await sendText(senderId, users[senderId].lang === 'ka'
-          ? `სპას ერთდღიანი ვიზიტი:\nკვირის დღეებში – 150 ₾\nუქმეებზე – 220 ₾\n\nაბონემენტები:\n1 თვე – 950 ₾\n3 თვე – 2565 ₾\n6 თვე – 4560 ₾\n\nაბონიმენტი მოიცავს:\n• ულიმიტო ვიზიტს\n• 1 პერსონალური მწვრთნელი\n• 1 სპაში ვიზიტი მეგობრისთვის\n• 1 სპა პროცედურა\n• 12 სტუდიო ვარჯიში\n• იოგა, კარდიო პილატესი, პრამა\n• 15% ფასდაკლება სპა პროცედურებზე\n\nსპა პროცედურების ჩამონათვალი:\nhttps://linktr.ee/paragraphfreedomsquaretbilisi`
-          : `One-day spa access:\nWeekdays – 150 GEL\nWeekends – 220 GEL\n\nMemberships:\n1 month – 950 GEL\n3 months – 2565 GEL\n6 months – 4560 GEL\n\nMembership includes:\n• Unlimited access\n• 1 personal trainer session\n• 1 spa visit for a friend\n• 1 spa treatment\n• 12 studio workouts\n• Yoga, cardio pilates, prama\n• 15% discount on spa treatments\n\nSpa treatment list:\nhttps://linktr.ee/paragraphfreedomsquaretbilisi`
+          ? `სპას ერთდღიანი ვიზიტი:
+კვირის დღეებში – 150 ₾
+უქმეებზე – 220 ₾
+
+აბონემენტები:
+1 თვე – 950 ₾
+3 თვე – 2565 ₾
+6 თვე – 4560 ₾
+
+აბონიმენტი მოიცავს:
+• ულიმიტო ვიზიტს
+• 1 პერსონალური მწვრთნელი
+• 1 სპაში ვიზიტი მეგობრისთვის
+• 1 სპა პროცედურა
+• 12 სტუდიო ვარჯიში
+• იოგა, კარდიო პილატესი, პრამა
+• 15% ფასდაკლება სპა პროცედურებზე
+
+სპა პროცედურების ჩამონათვალი:
+https://linktr.ee/paragraphfreedomsquaretbilisi`
+          : `One-day spa access:
+Weekdays – 150 GEL
+Weekends – 220 GEL
+
+Memberships:
+1 month – 950 GEL
+3 months – 2565 GEL
+6 months – 4560 GEL
+
+Membership includes:
+• Unlimited access
+• 1 personal trainer session
+• 1 spa visit for a friend
+• 1 spa treatment
+• 12 studio workouts
+• Yoga, cardio pilates, prama
+• 15% discount on spa treatments
+
+Spa treatment list:
+https://linktr.ee/paragraphfreedomsquaretbilisi`
         );
         await sendAfterInfoButtons(senderId, users[senderId].lang);
         break;
-
       case 'MORE_QUESTIONS':
         await sendText(senderId, users[senderId].lang === 'ka'
-          ? `დამატებითი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:\n+995 322 448 888\n\nან მოგვწერეთ:\nAYS.Luxury@paragraphhotels.com\n\nან დაელოდეთ ოპერატორს`
-          : `For additional information please contact us at:\n+995 322 448 888\n\nOr email us:\nAYS.Luxury@paragraphhotels.com\n\nOr wait for an operator`
+          ? `დამატებითი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:
++995 322 448 888
+
+ან მოგვწერეთ:
+AYS.Luxury@paragraphhotels.com
+
+ან დაელოდეთ ოპერატორს`
+          : `For additional information please contact us at:
++995 322 448 888
+
+Or email us:
+AYS.Luxury@paragraphhotels.com
+
+Or wait for an operator`
         );
         break;
-
       case 'GO_BACK':
-        await sendMainMenu(senderId, users[senderId].lang);
+        await sendMainMenu(senderId, lang);
         break;
-
       case 'START_AGAIN':
         users[senderId].greeted = false;
-        await sendText(senderId, "Hello! Please choose a language\nგამარჯობა, გთხოვთ აირჩიოთ ენა");
-        await sendLanguageButtons(senderId);
+        await sendText(senderId, users[senderId].lang === 'ka'
+          ? 'გსურთ საუბრის თავიდან დაწყება?'
+          : 'Would you like to start again?'
+        );
+        await sendRestartButton(senderId, users[senderId].lang);
         break;
     }
 
     return res.sendStatus(200);
   }
 
-  // -------------------------------
-  // HANDLE FREE TEXT KEYWORDS
-  // -------------------------------
+  // ===============================
+  // TEXT MESSAGE HANDLING
+  // ===============================
   if (text) {
-    const lang = users[senderId].lang;
+    // Already finished conversation
+    if (users[senderId].finished) return res.sendStatus(200);
 
-    if (containsKeyword(text, thanksKeywords)) {
-      await sendText(senderId, lang === 'ka'
-        ? 'მადლობა დაკავშირებისთვის'
-        : 'Thank you for contacting us'
-      );
+    // First greeting (if not greeted yet)
+    if (!users[senderId].greeted) {
+      const userName = await getUserName(senderId);
+      const greeting = `Hello ${userName}! Please choose a language\nგამარჯობა ${userName}! გთხოვთ აირჩიოთ ენა`;
+      await sendText(senderId, greeting);
+      await sendLanguageButtons(senderId);
       return res.sendStatus(200);
     }
 
+    // Thank you keyword
+    if (containsKeyword(text, thanksKeywords)) {
+      const reply = users[senderId].lang === 'ka'
+        ? 'მადლობა დაკავშირებისთვის'
+        : 'Thank you for contacting us';
+      if (users[senderId].lastResponse !== reply) {
+        await sendText(senderId, reply);
+        users[senderId].lastResponse = reply;
+      }
+      return res.sendStatus(200);
+    }
+
+    // Room / Restaurant / Spa keyword detection
     if (containsKeyword(text, roomKeywords)) {
-      await sendText(senderId, lang === 'ka'
-        ? `მოგესალმებით, ოთახების ფასებთან და ჯავშნებთან დაკავშირებული ნებისმიერი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:\n+995 322 448 888\n\nან მოგვწერეთ:\nAYS.Luxury@paragraphhotels.com\n\nდამატებითი ინფორმაციის მისაღებად, ეწვიეთ ჩვენს ვებგვერდს:\nhttps://www.marriott.com/en-us/hotels/tbslc-paragraph-freedom-square-a-luxury-collection-hotel-tbilisi/overview/`
-        : `For room rates and reservations, please contact us at:\n+995 322 448 888\n\nOr email us:\nAYS.Luxury@paragraphhotels.com\n\nFor more information, visit our website:\nhttps://www.marriott.com/en-us/hotels/tbslc-paragraph-freedom-square-a-luxury-collection-hotel-tbilisi/`
-      );
-      await sendAfterInfoButtons(senderId, lang);
+      const reply = users[senderId].lang === 'ka'
+        ? `მოგესალმებით, ოთახების ფასებთან და ჯავშნებთან დაკავშირებული ინფორმაცია:
++995 322 448 888
+ან მოგვწერეთ: AYS.Luxury@paragraphhotels.com
+დამატებითი ინფორმაციის მისაღებად ეწვიეთ ჩვენს ვებგვერდს:
+https://www.marriott.com/en-us/hotels/tbslc-paragraph-freedom-square-a-luxury-collection-hotel-tbilisi/overview/`
+        : `For room rates and reservations, contact:
++995 322 448 888
+Or email: AYS.Luxury@paragraphhotels.com
+For more info, visit: https://www.marriott.com/en-us/hotels/tbslc-paragraph-freedom-square-a-luxury-collection-hotel-tbilisi/`;
+      if (users[senderId].lastResponse !== reply) {
+        await sendText(senderId, reply);
+        users[senderId].lastResponse = reply;
+        await sendAfterInfoButtons(senderId, users[senderId].lang);
+      }
       return res.sendStatus(200);
     }
 
     if (containsKeyword(text, restaurantKeywords)) {
-      await sendText(senderId, lang === 'ka'
-        ? `მოგესალმებით, ჩვენი მენიუ შეგიძლიათ იხილოთ შემდეგ ბმულზე:\nhttps://linktr.ee/paragraphfreedomsquaretbilisi`
-        : `You can view our menu at the following link:\nhttps://linktr.ee/paragraphfreedomsquaretbilisi`
-      );
-      await sendAfterInfoButtons(senderId, lang);
+      const reply = users[senderId].lang === 'ka'
+        ? `მოგესალმებით, ჩვენი მენიუ შეგიძლიათ იხილოთ შემდეგ ბმულზე:
+https://linktr.ee/paragraphfreedomsquaretbilisi`
+        : `You can view our menu at: https://linktr.ee/paragraphfreedomsquaretbilisi`;
+      if (users[senderId].lastResponse !== reply) {
+        await sendText(senderId, reply);
+        users[senderId].lastResponse = reply;
+        await sendAfterInfoButtons(senderId, users[senderId].lang);
+      }
       return res.sendStatus(200);
     }
 
     if (containsKeyword(text, spaKeywords)) {
-      await sendText(senderId, lang === 'ka'
-        ? `სპას ერთდღიანი ვიზიტი:\nკვირის დღეებში – 150 ₾\nუქმეებზე – 220 ₾\n\nაბონემენტები:\n1 თვე – 950 ₾\n3 თვე – 2565 ₾\n6 თვე – 4560 ₾\n\nაბონიმენტი მოიცავს:\n• ულიმიტო ვიზიტს\n• 1 პერსონალური მწვრთნელი\n• 1 სპაში ვიზიტი მეგობრისთვის\n• 1 სპა პროცედურა\n• 12 სტუდიო ვარჯიში\n• იოგა, კარდიო პილატესი, პრამა\n• 15% ფასდაკლება სპა პროცედურებზე\n\nსპა პროცედურების ჩამონათვალი:\nhttps://linktr.ee/paragraphfreedomsquaretbilisi`
-        : `One-day spa access:\nWeekdays – 150 GEL\nWeekends – 220 GEL\n\nMemberships:\n1 month – 950 GEL\n3 months – 2565 GEL\n6 months – 4560 GEL\n\nMembership includes:\n• Unlimited access\n• 1 personal trainer session\n• 1 spa visit for a friend\n• 1 spa treatment\n• 12 studio workouts\n• Yoga, cardio pilates, prama\n• 15% discount on spa treatments\n\nSpa treatment list:\nhttps://linktr.ee/paragraphfreedomsquaretbilisi`
-      );
-      await sendAfterInfoButtons(senderId, lang);
+      const reply = users[senderId].lang === 'ka'
+        ? `სპას ერთდღიანი ვიზიტი:
+კვირის დღეებში – 150 ₾
+უქმეებზე – 220 ₾
+
+აბონემენტები:
+1 თვე – 950 ₾
+3 თვე – 2565 ₾
+6 თვე – 4560 ₾
+
+აბონიმენტი მოიცავს:
+• ულიმიტო ვიზიტს
+• 1 პერსონალური მწვრთნელი
+• 1 სპაში ვიზიტი მეგობრისთვის
+• 1 სპა პროცედურა
+• 12 სტუდიო ვარჯიში
+• იოგა, კარდიო პილატესი, პრამა
+• 15% ფასდაკლება სპა პროცედურებზე
+
+სპა პროცედურების ჩამონათვალი:
+https://linktr.ee/paragraphfreedomsquaretbilisi`
+        : `One-day spa access:
+Weekdays – 150 GEL
+Weekends – 220 GEL
+
+Memberships:
+1 month – 950 GEL
+3 months – 2565 GEL
+6 months – 4560 GEL
+
+Membership includes:
+• Unlimited access
+• 1 personal trainer session
+• 1 spa visit for a friend
+• 1 spa treatment
+• 12 studio workouts
+• Yoga, cardio pilates, prama
+• 15% discount on spa treatments
+
+Spa treatment list:
+https://linktr.ee/paragraphfreedomsquaretbilisi`;
+      if (users[senderId].lastResponse !== reply) {
+        await sendText(senderId, reply);
+        users[senderId].lastResponse = reply;
+        await sendAfterInfoButtons(senderId, users[senderId].lang);
+      }
       return res.sendStatus(200);
     }
 
-    // Fallback if no keywords match
-    await sendText(senderId, lang === 'ka'
-      ? `დამატებითი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:\n+995 322 448 888\n\nან მოგვწერეთ:\nAYS.Luxury@paragraphhotels.com\n\nან დაელოდეთ ოპერატორს`
-      : `For additional information please contact us at:\n+995 322 448 888\n\nOr email us:\nAYS.Luxury@paragraphhotels.com\n\nOr wait for an operator`
-    );
+    // Fallback
+    const fallback = users[senderId].lang === 'ka'
+      ? `დამატებითი ინფორმაციის მისაღებად დაგვიკავშირდით ნომერზე:
++995 322 448 888
+ან მოგვწერეთ: AYS.Luxury@paragraphhotels.com
+ან დაელოდეთ ოპერატორს`
+      : `For additional information contact:
++995 322 448 888
+Or email: AYS.Luxury@paragraphhotels.com
+Or wait for an operator`;
+    if (users[senderId].lastResponse !== fallback) {
+      await sendText(senderId, fallback);
+      users[senderId].lastResponse = fallback;
+    }
   }
 
   res.sendStatus(200);
@@ -247,10 +396,10 @@ async function sendLanguageButtons(senderId) {
     {
       recipient: { id: senderId },
       message: {
-        text: "Please choose your language\nგთხოვთ აირჩიოთ ენა",
+        text: 'Choose a language / აირჩიეთ ენა',
         quick_replies: [
-          { content_type: "text", title: "English", payload: "LANG_EN" },
-          { content_type: "text", title: "ქართული", payload: "LANG_KA" }
+          { content_type: 'text', title: 'English', payload: 'LANG_EN' },
+          { content_type: 'text', title: 'ქართული', payload: 'LANG_KA' }
         ]
       }
     }
@@ -297,6 +446,6 @@ async function sendAfterInfoButtons(senderId, lang) {
 }
 
 // ===============================
-app.listen(3000, () => {
-  console.log('Messenger bot running on port 3000');
-});
+// RESTART BUTTON
+// ===============================
+async function sendRestartButton(senderId
