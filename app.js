@@ -291,6 +291,16 @@ async function sendAfterInfoButtons(senderId, lang) {
 }
 
 // ===============================
-app.listen(3000, () => {
-  console.log('Messenger bot running on port 3000');
-});
+// AUTO RESET
+// ===============================
+function scheduleUserReset(senderId) {
+  setTimeout(() => {
+    if (users[senderId]) {
+      delete users[senderId];
+      console.log(`User ${senderId} session reset.`);
+    }
+  }, 3 * 60 * 1000); // 3 minutes
+}
+
+// ===============================
+app.listen(3000, () => console.log('Messenger bot running on port 3000'));
